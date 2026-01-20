@@ -1,4 +1,4 @@
-# Positive Semi-definite Latent Factor Grouping-Boosted Cluster-reasoning Instance Disentangled Learning for WSI Representation
+# Positive Semi-definite Group-aware Instance Disentangled Learning for WSI Representation
 ## :fire: News
 
 - TBD.
