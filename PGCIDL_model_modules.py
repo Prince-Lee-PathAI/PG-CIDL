@@ -430,10 +430,14 @@ class MIL_Parallel_Head(nn.Module):
         final_y = torch.mean(y, dim=1, keepdim=True)
         final_y = torch.reshape(final_y, (final_y.shape[0], final_y.shape[2]))
         y_final_logits = self.head(final_y)
+
+		# counterfacutal control
+		cf_dist = ((y0 - y_final) ** 2).sum(dim=1, keepdim=True).sqrt).mean()
+
         if self.feat_extract:
             return final_y
         else:
-            return y0_logits, y_final_logits, d_reg, compact_reg
+            return y0_logits, y_final_logits, cf_dist, d_reg, compact_reg
 
 
 
