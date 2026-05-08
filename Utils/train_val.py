@@ -30,7 +30,7 @@ def view_results(mil_feature=None, mil_head=None, train_loader=None,
             for train_img in train_img_list:
                 train_pre_y = torch.cat((train_pre_y, mil_feature(train_img.cuda())))
             train_pre_y = train_pre_y[1:]
-            train_pre_y, _, _, _ = mil_head(train_pre_y)
+            train_pre_y, _, _, _,_ = mil_head(train_pre_y)
             train_loss.append(loss_fn(train_pre_y, train_label).detach().cpu().numpy())
             train_pre_label = torch.argmax(train_pre_y, dim=1)
         train_acc.append(accuracy_score(train_label.detach().cpu().numpy(),
@@ -53,7 +53,7 @@ def testing_for_parallel(mil_feature=None, mil_head=None,class_num=None,
             for img in img_list:
                 pre_y = torch.cat((pre_y, mil_feature(img.cuda())))
             pre_y = pre_y[1:]
-            pre_y, _, _, _ = mil_head(pre_y)
+            pre_y, _, _, _,_ = mil_head(pre_y)
             test_pre_label = torch.argmax(pre_y, dim=1)
             test_acc.append(accuracy_score(label.detach().cpu().numpy(),
                                         test_pre_label.detach().cpu().numpy()))
@@ -131,8 +131,13 @@ def training_for_parallel(mil_feature=None, mil_head=None, train_loader=None, va
                                 pass
 
                     pre_y = pre_y[1:]
-                    pre_y0, pre_y_final, d_reg,  = mil_head(pre_y)
-                    loss_value = loss_fn(pre_y, img_label) - 0.1 * d_reg
+                    pre_y0, pre_y_final, cf_dist, d_reg, compact_reg = mil_head(pre_y)
+                  
+                    # counterfactual pseudo label (second max)
+                    top2_indices = torch.topk(pre_y0,k=2,dim=1).indices
+                    cf_label = top2_indices[:, 1]
+
+                    loss_value = loss_fn(pre_y0, img_label) + loss_fn(pre_y_final, cf_label) + cf_dist - 0.1 * d_reg + 0.1 * compact_reg
                 scaler.scale(loss_value).backward()
                 scaler.step(rmp_optim)
                 scaler.update()
