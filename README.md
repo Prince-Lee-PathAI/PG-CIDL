@@ -1,8 +1,7 @@
 # Positive Semi-definite Group-aware Instance Disentangled Learning for WSI Representation
 ## :fire: News
 
-- TBD.
-
+- 05/08/2026 We have released the datasets here (https://pan.baidu.com/s/1Mtr1H1mje_1GPsWQs6kHlQ?pwd=i4vq).
 
 
 ## :rocket: Pipeline
