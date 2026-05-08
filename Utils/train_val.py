@@ -160,9 +160,13 @@ def training_for_parallel(mil_feature=None, mil_head=None, train_loader=None, va
                         else:
                             pass
                 pre_y = pre_y[1:]
-                pre_y, d_reg = mil_head(pre_y)
+                pre_y0, pre_y_final, cf_dist, d_reg, compact_reg = mil_head(pre_y)
+                  
+                # counterfactual pseudo label (second max)
+                top2_indices = torch.topk(pre_y0,k=2,dim=1).indices
+                cf_label = top2_indices[:, 1]
 
-                loss_value = loss_fn(pre_y, img_label) - 0.1 * d_reg
+                loss_value = loss_fn(pre_y0, img_label) + loss_fn(pre_y_final, cf_label) + cf_dist - 0.1 * d_reg + 0.1 * compact_reg
                 loss_value.backward()
                 rmp_optim.step()
                 rmp_optim.zero_grad()
