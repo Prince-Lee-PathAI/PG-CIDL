@@ -337,13 +337,17 @@ class MIL_Parallel_Head(nn.Module):
 
 
     def forward(self, x):
-	d_reg = torch.zeros((1)).cuda()
-	y = torch.reshape(x, (int(x.shape[0] / self.bags_len), self.bags_len, x.shape[1]))
+		d_reg = torch.zeros((1)).cuda()
+		compact_reg = torch.zeros((1)).cuda()
+		y = torch.reshape(x, (int(x.shape[0] / self.bags_len), self.bags_len, x.shape[1]))
+		y0 = torch.mean(y, dim=1, keepdim=True)
+        y0 = torch.reshape(y0, (y0.shape[0], final_y.shape[2]))
+        y0_logits = self.head(y0)
         if self.bag_weight:
             bag_w = y[:]
             return bag_w
         # divided into batch again
-	max_dis = torch.zeros((1)).cuda()
+		max_dis = torch.zeros((1)).cuda()
         for i in range(y.shape[0]):
             original_group = y[i]
             assigned_sets = self.tgi_clustering_block.forward(original_group)
@@ -352,6 +356,23 @@ class MIL_Parallel_Head(nn.Module):
             indices_1 = torch.tensor(assigned_sets['1'], device=original_group.device)
             indices_2 = torch.tensor(assigned_sets['2'], device=original_group.device)
             # print(indices_1.shape,indices_2.shape,indices_0.shape)
+
+			cluster_indices = [indices_0, indices_1, indices_2]
+			for cluster_idx in cluster_indices:
+    			if cluster_idx.shape[0] > 0:
+        			cluster_feats = original_group[cluster_idx]
+       			    # cluster center
+        			cluster_center = torch.mean(cluster_feats, dim=0, keepdim=True)
+        			# L2 distance
+        			intra_dist = torch.norm(
+            			cluster_feats - cluster_center,
+            			p=2,
+            			dim=1
+        			)
+
+        			# mean compactness
+        			compact_reg += intra_dist.mean()
+
             if indices_1.shape == torch.Size([0]) or indices_2.shape == torch.Size([0]) or indices_0.shape == torch.Size([0]):
                 c_0_rate = torch.tensor(1).cuda(0)
                 c_1_rate = torch.tensor(1).cuda(0)
@@ -391,27 +412,28 @@ class MIL_Parallel_Head(nn.Module):
                 '1': c_1_rate,
                 '2': c_2_rate
             }
-	    index_list = sorted(dis_rates, key=dis_rates.get) # min - median - max 
-	    max_index = index_list[-1]
-	    max_instances_indices = [indices_0,indices_1,indices_2][int(max_index)]
-	    d_reg += self.tgi_clustering_block.instance_adaptive_distance(torch.mean(original_group[max_instances_indices], dim=0, keepdim=True).permute(1, 0),
-                   torch.mean(original_group[~torch.isin(all_indices, max_instances_indices)], dim=0, keepdim=True).permute(1, 0))
-            sorted_assigned_sets = [assigned_sets[k] for k in index_list]
-            if self.cluster_vis:
-                return sorted_assigned_sets
-		    
-	    y[i][0:self.bags_len, :][assigned_sets['0'], :] = c_0_rate * y[i][0:self.bags_len, :][assigned_sets['0'], :]
-            y[i][0:self.bags_len, :][assigned_sets['1'], :] = c_1_rate * y[i][0:self.bags_len, :][assigned_sets['1'], :]
-            y[i][0:self.bags_len, :][assigned_sets['2'], :] = c_2_rate * y[i][0:self.bags_len, :][assigned_sets['2'], :]
+		    index_list = sorted(dis_rates, key=dis_rates.get) # min - median - max 
+		    max_index = index_list[-1]
+		    max_instances_indices = [indices_0,indices_1,indices_2][int(max_index)]
+		    d_reg += self.tgi_clustering_block.instance_adaptive_distance(torch.mean(original_group[max_instances_indices], dim=0, keepdim=True).permute(1, 0),
+	                   torch.mean(original_group[~torch.isin(all_indices, max_instances_indices)], dim=0, keepdim=True).permute(1, 0))
+	        sorted_assigned_sets = [assigned_sets[k] for k in index_list]
+	        if self.cluster_vis:
+	            return sorted_assigned_sets
+			    
+		    y[i][0:self.bags_len, :][assigned_sets['0'], :] = c_0_rate * y[i][0:self.bags_len, :][assigned_sets['0'], :]
+	        y[i][0:self.bags_len, :][assigned_sets['1'], :] = c_1_rate * y[i][0:self.bags_len, :][assigned_sets['1'], :]
+	        y[i][0:self.bags_len, :][assigned_sets['2'], :] = c_2_rate * y[i][0:self.bags_len, :][assigned_sets['2'], :]
 		
-	d_reg = d_reg / y.shape[0]	    
+		d_reg = d_reg / y.shape[0]
+		compact_reg = compact_reg / (y.shape[0] * 3)
         final_y = torch.mean(y, dim=1, keepdim=True)
         final_y = torch.reshape(final_y, (final_y.shape[0], final_y.shape[2]))
-        y_logits = self.head(final_y)
+        y_final_logits = self.head(final_y)
         if self.feat_extract:
             return final_y
         else:
-            return y_logits, d_reg
+            return y0_logits, y_final_logits, d_reg, compact_reg
 
 
 
